@@ -1,16 +1,26 @@
-// This script handles the logic for the popup UI.
-
 document.addEventListener('DOMContentLoaded', () => {
     const addRuleBtn = document.getElementById('addRule');
     const applyColorsBtn = document.getElementById('applyColors');
     const accountNameInput = document.getElementById('accountName');
     const accountColorInput = document.getElementById('accountColor');
-    const accountNoteInput = document.getElementById('accountNote'); // New: Note input
     const rulesList = document.getElementById('rulesList');
 
-    // Load existing rules from storage and display them.
-    function loadRules() {
-        chrome.storage.sync.get({ accountColorRules: [] }, (data) => {
+    const enableFirstResponseHighlightCheckbox = document.getElementById('enableFirstResponseHighlight');
+    const firstResponseColorInput = document.getElementById('firstResponseColor');
+
+    const enableJiraStatusReleasedHighlightCheckbox = document.getElementById('enableJiraStatusReleasedHighlight');
+    const jiraStatusReleasedColorInput = document.getElementById('jiraStatusReleasedColor');
+
+    const enableLastModifiedHighlightCheckbox = document.getElementById('enableLastModifiedHighlight');
+    const lastModifiedColorInput = document.getElementById('lastModifiedColor');
+
+    function loadSettings() {
+        chrome.storage.sync.get({ 
+            accountColorRules: [],
+            firstResponseRule: { enabled: true, color: '#ffecb3' },
+            jiraStatusReleasedRule: { enabled: true, color: '#c8e6c9' },
+            lastModifiedRule: { enabled: true, color: '#ffcdd2' }
+        }, (data) => {
             rulesList.innerHTML = '';
             data.accountColorRules.forEach((rule, index) => {
                 const listItem = document.createElement('li');
@@ -18,22 +28,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 listItem.innerHTML = `
                     <div class="rule-info">
                         <div class="rule-color-box" style="background-color: ${rule.color};"></div>
-                        <div class="rule-name-note">
-                            <span class="rule-name">${rule.accountName}</span>
-                            ${rule.note ? `<span class="rule-note">${rule.note}</span>` : ''}
-                        </div>
+                        <span class="rule-name">${rule.accountName}</span>
                     </div>
                     <button class="delete-rule" data-index="${index}">&times;</button>
                 `;
                 rulesList.appendChild(listItem);
             });
+
+            enableFirstResponseHighlightCheckbox.checked = data.firstResponseRule.enabled;
+            firstResponseColorInput.value = data.firstResponseRule.color;
+
+            enableJiraStatusReleasedHighlightCheckbox.checked = data.jiraStatusReleasedRule.enabled;
+            jiraStatusReleasedColorInput.value = data.jiraStatusReleasedRule.color;
+
+            enableLastModifiedHighlightCheckbox.checked = data.lastModifiedRule.enabled;
+            lastModifiedColorInput.value = data.lastModifiedRule.color;
         });
     }
+
+    function saveRuleSetting(ruleName, enabledCheckbox, colorInput) {
+        chrome.storage.sync.get({ [ruleName]: { enabled: true, color: '#FFFFFF' } }, (data) => {
+            const currentRule = data[ruleName];
+            currentRule.enabled = enabledCheckbox.checked;
+            currentRule.color = colorInput.value;
+            chrome.storage.sync.set({ [ruleName]: currentRule });
+        });
+    }
+
+    enableFirstResponseHighlightCheckbox.addEventListener('change', () => saveRuleSetting('firstResponseRule', enableFirstResponseHighlightCheckbox, firstResponseColorInput));
+    firstResponseColorInput.addEventListener('change', () => saveRuleSetting('firstResponseRule', enableFirstResponseHighlightCheckbox, firstResponseColorInput));
+
+    enableJiraStatusReleasedHighlightCheckbox.addEventListener('change', () => saveRuleSetting('jiraStatusReleasedRule', enableJiraStatusReleasedHighlightCheckbox, jiraStatusReleasedColorInput));
+    jiraStatusReleasedColorInput.addEventListener('change', () => saveRuleSetting('jiraStatusReleasedRule', enableJiraStatusReleasedHighlightCheckbox, jiraStatusReleasedColorInput));
+
+    enableLastModifiedHighlightCheckbox.addEventListener('change', () => saveRuleSetting('lastModifiedRule', enableLastModifiedHighlightCheckbox, lastModifiedColorInput));
+    lastModifiedColorInput.addEventListener('change', () => saveRuleSetting('lastModifiedRule', enableLastModifiedHighlightCheckbox, lastModifiedColorInput));
+
 
     addRuleBtn.addEventListener('click', () => {
         const accountName = accountNameInput.value.trim();
         const color = accountColorInput.value;
-        const note = accountNoteInput.value.trim(); // New: Get note value
 
         if (accountName) {
             chrome.storage.sync.get({ accountColorRules: [] }, (data) => {
@@ -41,18 +75,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const existingRuleIndex = newRules.findIndex(r => r.accountName.toLowerCase() === accountName.toLowerCase());
                 
                 if (existingRuleIndex > -1) {
-                    // Update existing rule
                     newRules[existingRuleIndex].color = color;
-                    newRules[existingRuleIndex].note = note; // Update note
                 } else {
-                    // Add new rule
-                    newRules.push({ accountName, color, note }); // Save note
+                    newRules.push({ accountName, color });
                 }
                 
                 chrome.storage.sync.set({ accountColorRules: newRules }, () => {
                     accountNameInput.value = '';
-                    accountNoteInput.value = ''; // Clear note input
-                    loadRules();
+                    loadSettings();
                 });
             });
         }
@@ -63,35 +93,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const indexToDelete = parseInt(e.target.dataset.index, 10);
             chrome.storage.sync.get({ accountColorRules: [] }, (data) => {
                 const newRules = data.accountColorRules.filter((_, index) => index !== indexToDelete);
-                chrome.storage.sync.set({ accountColorRules: newRules }, loadRules);
+                chrome.storage.sync.set({ accountColorRules: newRules }, loadSettings);
             });
         }
     });
 
     applyColorsBtn.addEventListener('click', () => {
-        // Trigger the coloring function in the active tab's content script
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs.length > 0 && tabs[0].id) {
                 chrome.scripting.executeScript({
                     target: { tabId: tabs[0].id },
-                    function: applyColoringAndNotes // Call the main coloring function
+                    function: applyAllRules
                 });
             } else {
-                console.error("No active tab found to apply colors.");
+                console.error("No active tab.");
             }
         });
     });
 
-    loadRules();
+    loadSettings();
 });
 
-// This function is injected into the page to apply the coloring and notes.
-// It's defined here so it can be easily passed to executeScript.
-function applyColoringAndNotes() {
-    // This is a placeholder that will call the main function in content.js
+function applyAllRules() {
     if (window.applySalesforceColoring) {
         window.applySalesforceColoring();
     } else {
-        console.error('applySalesforceColoring function not found on the page.');
+        console.error('applySalesforceColoring on the page.');
     }
 }

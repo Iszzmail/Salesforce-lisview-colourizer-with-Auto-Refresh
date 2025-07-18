@@ -1,22 +1,16 @@
 {
-    "manifest_version": 3,
-    "name": "Salesforce Row Colorizer",
-    "version": "1.0",
-    "description": "Highlights rows in Salesforce list views based on Last Modified date and Account Name.",
-    "permissions": ["storage", "activeTab", "scripting"],
-    "action": {
-      "default_popup": "popup.html"
-    },
-    "content_scripts": [
-      {
-        "matches": ["https://*.lightning.force.com/*"],
-        "js": ["content.js"]
-      }
-    ],
-    "web_accessible_resources": [
-      {
-        "resources": ["images/*.png"],
-        "matches": ["<all_urls>"]
-      }
-    ]
-  }
+  "manifest_version": 3,
+  "name": "Salesforce Row Colorizer",
+  "version": "1.2",
+  "description": "Highlights rows in Salesforce list views based on First Response, JIRA Status, Last Modified dates, and Account Name, with configurable custom colors.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.lightning.force.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
