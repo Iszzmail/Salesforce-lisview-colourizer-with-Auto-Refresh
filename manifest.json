@@ -1,16 +1,37 @@
 {
   "manifest_version": 3,
-  "name": "Salesforce Row Colorizer",
-  "version": "1.2",
-  "description": "Highlights rows in Salesforce list views based on First Response, JIRA Status, Last Modified dates, and Account Name, with configurable custom colors.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "name": "Salesforce Highlighter & Refresher",
+  "version": "4.2",
+  "description": "Color-codes Salesforce case views, provides auto-refresh, and adds a per-case notes feature.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
   "action": {
     "default_popup": "popup.html"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://*.lightning.force.com/*"],
-      "js": ["content.js"]
+      "matches": [
+        "https://*.lightning.force.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["https://*.lightning.force.com/*"]
     }
   ]
 }

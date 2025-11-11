@@ -1,0 +1,65 @@
+:root {
+  --bg-color-dark: #282c34; --text-color-dark: #abb2bf; --card-bg-dark: #323842; --border-color-dark: #4b5263; --header-text-dark: #ffffff;
+  --bg-color-light: #f8f9fa; --text-color-light: #495057; --card-bg-light: #ffffff; --border-color-light: #dee2e6; --header-text-light: #212529;
+  --accent-color: #61afef; --accent-hover: #528baf; --danger-color: #e06c75; --success-color: #98c379;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; width: 380px; padding: 16px; margin: 0; transition: background-color 0.3s, color 0.3s; }
+body.dark-mode { background-color: var(--bg-color-dark); color: var(--text-color-dark); }
+body.light-mode { background-color: var(--bg-color-light); color: var(--text-color-light); }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header-title { display: flex; align-items: center; }
+.header svg { width: 40px; height: 40px; margin-right: 12px; }
+.header h2 { font-size: 20px; margin: 0; }
+body.dark-mode .header h2 { color: var(--header-text-dark); }
+body.light-mode .header h2 { color: var(--header-text-light); }
+.theme-switcher { display: flex; align-items: center; gap: 8px; }
+.theme-switcher .icon { width: 20px; height: 20px; fill: var(--text-color-dark); transition: fill 0.3s; }
+body.light-mode .theme-switcher .icon { fill: var(--text-color-light); }
+.card { border-radius: 8px; padding: 16px; margin-bottom: 16px; transition: background-color 0.3s, opacity 0.3s; }
+body.dark-mode .card { background-color: var(--card-bg-dark); }
+body.light-mode .card { background-color: var(--card-bg-light); }
+.card.disabled { opacity: 0.5; pointer-events: none; }
+h3 { font-size: 16px; margin-top: 0; margin-bottom: 16px; padding-bottom: 8px; transition: border-color 0.3s, color 0.3s; }
+body.dark-mode h3 { border-bottom: 1px solid var(--border-color-dark); color: var(--header-text-dark); }
+body.light-mode h3 { border-bottom: 1px solid var(--border-color-light); color: var(--header-text-light); }
+.rule { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.rule:last-child { margin-bottom: 0; }
+.rule span { flex-grow: 1; font-weight: 500; }
+.main-toggle-label { font-weight: 500; font-size: 16px; }
+input[type="color"] { -webkit-appearance: none; width: 28px; height: 28px; border: none; border-radius: 6px; cursor: pointer; background-color: transparent; margin-right: 12px; flex-shrink: 0; }
+.custom-account-rule-creator input[type="color"] { margin-right: 0; }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border-radius: 6px; transition: border-color 0.3s; }
+body.dark-mode input[type="color"]::-webkit-color-swatch { border: 1px solid var(--border-color-dark); }
+body.light-mode input[type="color"]::-webkit-color-swatch { border: 1px solid var(--border-color-light); }
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5263; transition: .4s; border-radius: 24px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--accent-color); }
+input:checked + .slider:before { transform: translateX(20px); }
+input[type="text"] { width: 100%; padding: 10px 12px; border-radius: 6px; box-sizing: border-box; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
+body.dark-mode input[type="text"] { background-color: var(--bg-color-dark); border: 1px solid var(--border-color-dark); color: var(--text-color-dark); }
+body.light-mode input[type="text"] { background-color: var(--bg-color-light); border: 1px solid var(--border-color-light); color: var(--text-color-light); }
+.custom-account-rule-creator { display: flex; align-items: center; gap: 8px; }
+.account-input-group { flex-grow: 1; display: flex; flex-direction: column; gap: 8px; }
+.main-button { width: 100%; background-color: var(--accent-color); color: white; border: none; padding: 10px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.3s; }
+.main-button:hover { background-color: var(--accent-hover); }
+.main-button.danger-button { background-color: var(--danger-color); }
+.main-button.danger-button:hover { background-color: #c05f67; }
+#account-rules-list { margin-top: 16px; max-height: 120px; overflow-y: auto; }
+.account-rule-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; font-size: 14px; transition: border-color 0.3s; }
+body.dark-mode .account-rule-item { border-bottom: 1px solid var(--border-color-dark); }
+body.light-mode .account-rule-item { border-bottom: 1px solid var(--border-color-light); }
+.account-rule-item:last-child { border-bottom: none; }
+.account-info { display: flex; align-items: center; }
+.color-box { width: 16px; height: 16px; border-radius: 3px; margin-right: 8px; border: 1px solid var(--border-color); }
+.delete-button { background: none; border: none; color: var(--danger-color); cursor: pointer; font-size: 18px; padding: 0 4px; }
+.interval-controls { display: flex; align-items: center; gap: 10px; }
+.interval-btn { background-color: transparent; border: 1px solid; border-radius: 50%; width: 24px; height: 24px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+body.dark-mode .interval-btn { color: var(--text-color-dark); border-color: var(--border-color-dark); }
+body.light-mode .interval-btn { color: var(--text-color-light); border-color: var(--border-color-light); }
+body.dark-mode .interval-btn:hover { background-color: rgba(255, 255, 255, 0.1); }
+body.light-mode .interval-btn:hover { background-color: rgba(0, 0, 0, 0.05); }
+#refresh-interval-display { font-weight: bold; font-size: 14px; }
+.last-refresh-info { text-align: center; margin-top: 12px; font-size: 12px; opacity: 0.8; }

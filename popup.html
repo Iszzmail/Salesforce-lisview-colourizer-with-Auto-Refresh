@@ -1,200 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salesforce Row Colorizer</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            width: 350px;
-            padding: 15px;
-            background-color: #f4f6f9;
-            color: #333;
-        }
-
-        h1 {
-            font-size: 18px;
-            margin-top: 0;
-            margin-bottom: 15px;
-            color: #0070d2;
-            text-align: center;
-        }
-
-        h2 {
-            font-size: 16px;
-            margin-top: 20px;
-            margin-bottom: 10px;
-            color: #0070d2;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 5px;
-        }
-
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .rule-group, .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            background-color: #ffffff;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
-        .checkbox-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-
-        label {
-            font-weight: 500;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-        }
-
-        input[type='text'], input[type='color'] {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            width: 100%;
-            box-sizing: border-box;
-            font-family: 'Inter', sans-serif;
-        }
-        input[type='color'] {
-            height: 40px;
-            padding: 2px;
-            width: 60px;
-            cursor: pointer;
-        }
-        input[type='checkbox'] {
-            transform: scale(1.2);
-            flex-shrink: 0;
-        }
-
-        button {
-            padding: 10px 15px;
-            border-radius: 5px;
-            border: none;
-            background-color: #0070d2;
-            color: white;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        button:hover {
-            background-color: #005fb2;
-        }
-
-        #rulesList {
-            margin-top: 15px;
-            padding-left: 0;
-            list-style: none;
-        }
-
-        .rule-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px;
-            background-color: white;
-            border-radius: 4px;
-            margin-bottom: 5px;
-            font-size: 14px;
-            flex-wrap: wrap;
-            border: 1px solid #eee;
-        }
-        .rule-info {
-            display: flex;
-            align-items: center;
-            flex-grow: 1;
-        }
-        .rule-color-box {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-            border: 1px solid #eee;
-            margin-right: 10px;
-            flex-shrink: 0;
-        }
-        .rule-name {
-            font-weight: 600;
-        }
-
-        .delete-rule {
-            background: none;
-            border: none;
-            color: #c23934;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 16px;
-            margin-left: 10px;
-        }
-    </style>
+  <title>Salesforce Highlighter</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
-<body>
-    <h1>Salesforce Row Colorizer</h1>
-    <div class="container">
-        <h2>Highlighting Rules:</h2>
-        
-        <div class="rule-group">
-            <div class="checkbox-row">
-                <label for="enableFirstResponseHighlight">
-                    <input type="checkbox" id="enableFirstResponseHighlight">
-                    Empty First Response:
-                </label>
-                <input type="color" id="firstResponseColor" value="#ffecb3">
-            </div>
-            <p style="font-size:12px; color:#666; margin-top:5px; margin-bottom:0;"></p>
-        </div>
+<body class="dark-mode">
 
-        <div class="rule-group">
-            <div class="checkbox-row">
-                <label for="enableJiraStatusReleasedHighlight">
-                    <input type="checkbox" id="enableJiraStatusReleasedHighlight">
-                    JIRA Status "Released":
-                </label>
-                <input type="color" id="jiraStatusReleasedColor" value="#c8e6c9">
-            </div>
-            <p style="font-size:12px; color:#666; margin-top:5px; margin-bottom:0;"></p>
-        </div>
-
-        <div class="rule-group">
-            <div class="checkbox-row">
-                <label for="enableLastModifiedHighlight">
-                    <input type="checkbox" id="enableLastModifiedHighlight">
-                    Old Last Modified Date:
-                </label>
-                <input type="color" id="lastModifiedColor" value="#ffcdd2">
-            </div>
-            <p style="font-size:12px; color:#666; margin-top:5px; margin-bottom:0;"></p>
-        </div>
-
-        <h2>Custom Account Colors:</h2>
-        <div class="input-group">
-            <label for="accountName">Account Name:</label>
-            <input type="text" id="accountName" placeholder="e.g., Acme Corp">
-        </div>
-        <div class="input-group">
-            <label for="accountColor">Choose Color:</label>
-            <input type="color" id="accountColor" value="#ffff00">
-        </div>
-        <button id="addRule">Add/Update Account Rule</button>
-        <button id="applyColors">Apply All Rules on Page</button>
+  <div class="header">
+    <div class="header-title">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.0423 4.416C16.1433 3.517 14.8623 3 13.5023 3C10.7423 3 8.50232 5.24 8.50232 8C8.50232 9.36 9.01932 10.64 9.91832 11.54L4.10232 17.35C3.71232 17.74 3.71232 18.37 4.10232 18.76L5.24232 19.9C5.63232 20.29 6.26232 20.29 6.65232 19.9L12.4623 14.08C13.3623 14.98 14.6423 15.5 16.0023 15.5C18.7623 15.5 21.0023 13.26 21.0023 10.5C21.0023 9.14 20.4823 7.86 19.5823 6.96L17.0423 4.416ZM15.2923 6.126L16.8723 7.706C17.3423 7.236 17.5023 6.556 17.5023 5.916C17.5023 5.276 17.3423 4.596 16.8723 4.126L15.2923 5.516C15.2923 5.706 15.2923 5.926 15.2923 6.126Z" fill="#61afef"/><path d="M12.46 14.08L6.65 19.9C6.26 20.29 5.63 20.29 5.24 19.9L4.1 18.76C3.71 18.37 3.71 17.74 4.1 17.35L9.92 11.54C9.53181 11.2333 9.19183 10.8712 8.91 10.47L3 16.28V21H7.72L13.53 15.19C13.13 14.91 12.77 14.57 12.46 14.08Z" fill="#528baf"/></svg>
+      <h2>Highlighter</h2>
     </div>
-    <ul id="rulesList"></ul>
+    <div class="theme-switcher">
+      <svg class="icon" id="sun-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm-.707 7.072l.707-.707a1 1 0 10-1.414-1.414l-.707.707a1 1 0 101.414 1.414zM3 11a1 1 0 100-2H2a1 1 0 100 2h1z" clip-rule="evenodd" /></svg>
+      <label class="switch" title="Toggle Theme"><input type="checkbox" id="theme-toggle"><span class="slider"></span></label>
+      <svg class="icon" id="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
+    </div>
+  </div>
 
-    <script src="popup.js"></script>
+  <div class="card">
+    <div class="rule">
+      <span class="main-toggle-label">Enable Highlighter</span>
+      <label class="switch"><input type="checkbox" id="master-enable-toggle"><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div class="card" id="auto-refresh-card">
+    <h3>Auto Refresh</h3>
+    <div class="rule">
+      <span>Enable Auto Refresh</span>
+      <label class="switch"><input type="checkbox" id="refresh-enable-toggle"><span class="slider"></span></label>
+    </div>
+    <div id="refresh-controls-container" class="disabled">
+      <div class="rule">
+        <span>Interval (minutes)</span>
+        <div class="interval-controls">
+          <button class="interval-btn" id="decrease-interval">-</button>
+          <span id="refresh-interval-display">5</span>
+          <button class="interval-btn" id="increase-interval">+</button>
+        </div>
+      </div>
+      <div class="last-refresh-info">
+        Last Refresh: <span id="last-refresh-time">Never</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="rules-container">
+    <div class="card">
+      <h3>Coloring Rules</h3>
+      <div class="rule"><span>Action Needed</span><input type="color" id="color-action-needed" value="#ff4d4d"><label class="switch"><input type="checkbox" id="enable-action-needed"><span class="slider"></span></label></div>
+      <div class="rule"><span>Platinum Support</span><input type="color" id="color-platinum-support" value="#D4AF37"><label class="switch"><input type="checkbox" id="enable-platinum-support"><span class="slider"></span></label></div>
+      <div class="rule"><span>Empty First Response</span><input type="color" id="color-empty-first-response" value="#FFC0CB"><label class="switch"><input type="checkbox" id="enable-empty-first-response"><span class="slider"></span></label></div>
+      <div class="rule"><span>"Closed" JIRA Status</span><input type="color" id="color-jira-status" value="#ADD8E6"><label class="switch"><input type="checkbox" id="enable-jira-status"><span class="slider"></span></label></div>
+      <div class="rule"><span>Last Modified > 24 hrs</span><input type="color" id="color-old-last-modified" value="#FFFFE0"><label class="switch"><input type="checkbox" id="enable-old-last-modified"><span class="slider"></span></label></div>
+    </div>
+    <div class="card">
+      <h3>Custom Account Rules</h3>
+      <div class="custom-account-rule-creator">
+        <input type="color" id="account-color-input" value="#90EE90">
+        <div class="account-input-group">
+          <input type="text" id="account-name-input" placeholder="Account Name">
+          <button class="main-button" id="add-account-rule">Add / Update Rule</button>
+        </div>
+      </div>
+      <div id="account-rules-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Notes</h3>
+    <button class="main-button danger-button" id="clear-all-notes">Clear All Case Notes</button>
+  </div>
+
+  <button class="main-button" id="apply-rules-button">Apply All Rules on Page</button>
+
+  <script src="popup.js"></script>
 </body>
 </html>

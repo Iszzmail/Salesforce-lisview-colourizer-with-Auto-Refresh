@@ -1,185 +1,428 @@
-console.log(' content script loaded.');
+let settings = {};
+let headerIndices = {};
+let allCaseNotes = {};
 
-function parseSalesforceDateTime(dtString) {
-    if (!dtString) return null;
-    try {
-        const parts = dtString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s(\d{1,2}):(\d{2})\s(AM|PM)/i);
-        if (!parts) {
-            const date = new Date(dtString);
-            return isNaN(date.getTime()) ? null : date;
+// --- Note Popover "Box" ---
+// Create the note popover HTML only once and append it to the body.
+function createNotePopover() {
+    if (document.getElementById('case-note-popover')) return;
+
+    const popoverHTML = `
+        <div id="case-note-popover" class="note-popover" style="display: none; position: absolute; z-index: 9002;">
+            <div id="case-note-popover-content" class="note-popover-content">
+                <h3 id="case-note-popover-title">Case Notes for: 000000</h3>
+                <textarea id="case-note-popover-textarea" placeholder="Add your notes here..."></textarea>
+                <div class="note-popover-actions">
+                    <button id="case-note-popover-save" class="note-popover-button note-popover-save">Save</button>
+                    <button id="case-note-popover-close" class="note-popover-button note-popover-close">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', popoverHTML);
+
+    // Add event listeners for the modal buttons
+    document.getElementById('case-note-popover-close').addEventListener('click', hideNotePopover);
+    document.getElementById('case-note-popover-save').addEventListener('click', saveCurrentNote);
+
+    // Global click listener to close the popover if clicking outside
+    // Use 'mousedown' in capture phase to reliably close popover
+    document.addEventListener('mousedown', (e) => {
+        const popover = document.getElementById('case-note-popover');
+        if (!popover || popover.style.display === 'none') {
+            return;
         }
-
-        const month = parseInt(parts[1], 10) - 1; 
-        const day = parseInt(parts[2], 10);
-        const year = parseInt(parts[3], 10);
-        let hour = parseInt(parts[4], 10);
-        const minute = parseInt(parts[5], 10);
-        const ampm = parts[6].toUpperCase();
-
-        if (ampm === 'PM' && hour < 12) hour += 12;
-        if (ampm === 'AM' && hour === 12) hour = 0; 
+        // Check if the click was inside the popover or on a note button
+        const isNoteButton = e.target.closest('.note-icon-btn');
+        const isInsidePopover = e.target.closest('#case-note-popover');
         
-        return new Date(year, month, day, hour, minute);
-    } catch (e) {
-        console.error('Error parsing date:', dtString, e);
-        return null;
+        if (!isNoteButton && !isInsidePopover) {
+            hideNotePopover();
+        }
+    }, true);
+}
+
+function showNotePopover(caseNumber, buttonElement) {
+    const popover = document.getElementById('case-note-popover');
+    const modalTitle = document.getElementById('case-note-popover-title');
+    const modalTextarea = document.getElementById('case-note-popover-textarea');
+
+    // Hide if already open for this button
+    if (popover.style.display === 'block' && popover.dataset.caseNumber === caseNumber) {
+        hideNotePopover();
+        return;
+    }
+
+    modalTitle.textContent = `Case Notes for: ${caseNumber}`;
+    modalTextarea.value = allCaseNotes[caseNumber] || '';
+    popover.dataset.caseNumber = caseNumber; // Store the case number
+    
+    // Position the popover
+    const rect = buttonElement.getBoundingClientRect();
+    const popoverWidth = 400; // Must match CSS
+    const popoverHeight = 250; // Estimated height
+
+    let top = window.scrollY + rect.bottom + 5;
+    let left = window.scrollX + rect.left;
+
+    // If it goes off-screen to the right, move it to the left of the icon
+    if (left + popoverWidth > window.innerWidth) {
+        left = window.scrollX + rect.right - popoverWidth;
+    }
+    
+    // If it goes off-screen to the bottom, move it above the icon
+    if (top + popoverHeight > window.innerHeight + window.scrollY) {
+        top = window.scrollY + rect.top - popoverHeight - 5;
+    }
+
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+    
+    popover.style.display = 'block';
+    modalTextarea.focus();
+}
+
+function hideNotePopover() {
+    const popover = document.getElementById('case-note-popover');
+    if (popover) {
+        popover.style.display = 'none';
     }
 }
 
-window.applySalesforceColoring = function() {
-    console.log('Applying coloring rules...');
-    
-    chrome.storage.sync.get({ 
-        accountColorRules: [],
-        firstResponseRule: { enabled: true, color: '#ffecb3' },
-        jiraStatusReleasedRule: { enabled: true, color: '#c8e6c9' },
-        lastModifiedRule: { enabled: true, color: '#ffcdd2' }
-    }, (data) => {
-        const { accountColorRules, firstResponseRule, jiraStatusReleasedRule, lastModifiedRule } = data;
-        const now = new Date();
-        const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        
-        const tables = document.querySelectorAll('table[role="grid"]');
-        
-        if (tables.length === 0) {
-            console.log("No list view tables found");
-            return;
+function saveCurrentNote() {
+    const popover = document.getElementById('case-note-popover');
+    const caseNumber = popover.dataset.caseNumber;
+    const noteText = document.getElementById('case-note-popover-textarea').value;
+
+    if (!caseNumber) return;
+
+    allCaseNotes[caseNumber] = noteText.trim();
+
+    // Update storage
+    chrome.storage.sync.get(['caseNotes'], (data) => {
+        let notes = data.caseNotes || {};
+        if (noteText.trim() === '') {
+            delete notes[caseNumber]; // Remove note if it's empty
+        } else {
+            notes[caseNumber] = noteText.trim();
         }
-
-        tables.forEach((table, tableIndex) => {
-            const headers = table.querySelectorAll('thead th');
-            const rows = table.querySelectorAll('tbody tr');
-            if (rows.length === 0) return;
-
-            let accountNameIndex = -1;
-            let lastModifiedIndex = -1;
-            let firstResponseIndex = -1;
-            let jiraStatusIndex = -1;
-
-            headers.forEach((header, index) => {
-                const headerText = (header.getAttribute('aria-label') || header.textContent).trim().toLowerCase();
-                if (headerText === 'account name') accountNameIndex = index;
-                if (headerText === 'last modified date') lastModifiedIndex = index;
-                if (headerText === 'first response') firstResponseIndex = index;
-                if (headerText === 'jira status') jiraStatusIndex = index;
-            });
-            
-            rows.forEach((row, rowIndex) => {
-                row.style.backgroundColor = '';
-                const cells = row.querySelectorAll('th, td');
-                if(cells.length === 0) return;
-
-                let finalColor = '';
-
-               
-                if (lastModifiedRule.enabled && lastModifiedIndex > -1 && cells.length > lastModifiedIndex) {
-                    const cell = cells[lastModifiedIndex];
-                    const dateElement = cell.querySelector('lightning-formatted-text, span[title]');
-                    const dateText = dateElement ? dateElement.textContent.trim() : cell.textContent.trim();
-                    
-                    if (dateText) {
-                        const lastModifiedDate = parseSalesforceDateTime(dateText);
-                        if (lastModifiedDate && lastModifiedDate < twentyFourHoursAgo) {
-                            finalColor = lastModifiedRule.color;
-                        }
-                    }
-                }
-
-                // 3. Medium Priority
-                if (jiraStatusReleasedRule.enabled && jiraStatusIndex > -1 && cells.length > jiraStatusIndex) {
-                    const cell = cells[jiraStatusIndex];
-                    const jiraStatusText = (cell.querySelector('span[title]') || cell).textContent.trim();
-                    
-                    const normalizedStatus = jiraStatusText.toLowerCase();
-                    if (normalizedStatus === 'released' || normalizedStatus === 'done' || normalizedStatus === 'cancelled') {
-                        finalColor = jiraStatusReleasedRule.color;
-                    }
-                }
-
-                // 2. High Priority
-                if (firstResponseRule.enabled && firstResponseIndex > -1 && cells.length > firstResponseIndex) {
-                    const cell = cells[firstResponseIndex];
-                    const firstResponseText = (cell.querySelector('span[title]') || cell).textContent.trim();
-                    
-                    if (!firstResponseText) {
-                        finalColor = firstResponseRule.color;
-                    }
-                }
-
-                // 1. Highest Priority: 
-                if (accountNameIndex > -1 && cells.length > accountNameIndex) {
-                    const cell = cells[accountNameIndex];
-                    const accountElement = cell.querySelector('a[title], span'); 
-                    const rawAccountNameText = accountElement ? accountElement.textContent.trim() : cell.textContent.trim();
-
-                    if (rawAccountNameText && accountColorRules.length > 0) {
-                        const matchingRule = accountColorRules.find(rule => 
-                            rule.accountName && rule.accountName.toLowerCase() === rawAccountNameText.toLowerCase()
-                        );
-                        if (matchingRule) {
-                            finalColor = matchingRule.color;
-                        }
-                    }
-                }
-
-                row.style.backgroundColor = finalColor;
-            });
+        // Save notes back to sync storage
+        chrome.storage.sync.set({ ...settings, caseNotes: notes }, () => {
+            console.log(`Note saved for ${caseNumber}`);
+            hideNotePopover();
+            // Update the icon state immediately and re-apply styling
+            // (which will now skip coloring if a note exists)
+            processViews();
         });
-        console.log('Coloring rules appliedd.');
     });
-};
+}
+// --- End of Note Popover ---
 
-let mainExecutionTimeout;
-let retryAttempts = 0;
-const MAX_RETRY_ATTEMPTS = 10; 
 
-function scheduleMainExecution() {
-    clearTimeout(mainExecutionTimeout);
-    mainExecutionTimeout = setTimeout(() => {
-        window.applySalesforceColoring();
-    }, 750); 
+function parseSalesforceDate(dateString) {
+    if (!dateString || typeof dateString !== 'string') { return null; }
+    const todayMatch = dateString.match(/today at (\d{1,2}):(\d{2})\s*(am|pm)/i);
+    if (todayMatch) {
+        let [, hours, minutes, period] = todayMatch;
+        hours = parseInt(hours, 10);
+        if (period.toLowerCase() === 'pm' && hours < 12) { hours += 12; }
+        if (period.toLowerCase() === 'am' && hours === 12) { hours = 0; }
+        const date = new Date();
+        date.setHours(hours, parseInt(minutes, 10), 0, 0);
+        return date;
+    }
+    const fullDateMatch = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2})\s*(am|pm)/i);
+    if (fullDateMatch) {
+        let [, month, day, year, hours, minutes, period] = fullDateMatch;
+        hours = parseInt(hours, 10);
+        if (period.toLowerCase() === 'pm' && hours < 12) { hours += 12; }
+        if (period.toLowerCase() === 'am' && hours === 12) { hours = 0; }
+        return new Date(year, month - 1, day, hours, minutes);
+    }
+    return null;
 }
 
-const observer = new MutationObserver((mutationsList, obs) => {
-    let relevantChangeDetected = false;
-    for (const mutation of mutationsList) {
-        if (mutation.type === 'childList' || mutation.type === 'subtree') {
-            if (mutation.addedNodes.length > 0) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === 1 && (node.matches('table[role="grid"] tbody tr') || node.matches('table[role="grid"]'))) {
-                        relevantChangeDetected = true;
-                        break;
-                    }
+function getHeaderIndices(table) {
+    const indices = {};
+    const headers = table.querySelectorAll('thead th');
+    headers.forEach((th, index) => {
+        const text = (th.getAttribute('aria-label') || th.textContent).trim();
+        
+        // Find standard columns
+        if (text.includes('Account Support Tier')) indices.supportTier = index;
+        if (text.includes('Account Name')) indices.accountName = index;
+        if (text.includes('First Response')) indices.firstResponse = index;
+        if (text === 'Status') indices.status = index;
+        if (text.includes('JIRA Status')) indices.jiraStatus = index;
+        if (text.includes('Last Modified Date')) indices.lastModified = index;
+        if (text.includes('Case Number')) indices.caseNumber = index;
+        if (text.includes('Subject')) indices.subject = index; // Target for notes
+    });
+    return indices;
+}
+
+
+function applyStylingAndNotes(row) {
+    if (!row) return;
+    
+    // --- Reset Styles ---
+    row.style.backgroundColor = '';
+    row.classList.remove('platinum-support-row');
+    let appliedColor = null;
+
+    const cells = row.querySelectorAll('td, th');
+    if (cells.length === 0) return;
+
+    // --- Gather Data for Rules ---
+    const rules = {
+        supportTier: (headerIndices.supportTier !== undefined && cells[headerIndices.supportTier]) ? cells[headerIndices.supportTier].textContent.trim() : null,
+        accountName: (headerIndices.accountName !== undefined && cells[headerIndices.accountName]) ? cells[headerIndices.accountName].textContent.trim() : null,
+        firstResponse: (headerIndices.firstResponse !== undefined && cells[headerIndices.firstResponse]) ? cells[headerIndices.firstResponse].textContent.trim() : null,
+        status: (headerIndices.status !== undefined && cells[headerIndices.status]) ? cells[headerIndices.status].textContent.trim() : null,
+        jiraStatus: (headerIndices.jiraStatus !== undefined && cells[headerIndices.jiraStatus]) ? cells[headerIndices.jiraStatus].textContent.trim() : null,
+        lastModifiedText: (headerIndices.lastModified !== undefined && cells[headerIndices.lastModified]) ? cells[headerIndices.lastModified].textContent.trim() : null,
+        caseNumber: (headerIndices.caseNumber !== undefined && cells[headerIndices.caseNumber]) ? cells[headerIndices.caseNumber].textContent.trim() : null,
+    };
+    
+    const hasNote = !!(rules.caseNumber && allCaseNotes[rules.caseNumber]);
+
+    // --- 1. Apply Coloring Rules (ONLY if no note exists) ---
+    if (!hasNote) {
+        const lastModifiedDate = parseSalesforceDate(rules.lastModifiedText);
+        const isOld = lastModifiedDate && lastModifiedDate < new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const isJiraClosed = rules.jiraStatus && ['released', 'done', 'cancelled', 'canceled'].includes(rules.jiraStatus.toLowerCase());
+        const isTechnicalIssue = rules.status && rules.status.toLowerCase() === 'technical issue/bug';
+
+        if (settings.enableActionNeeded && isJiraClosed && isTechnicalIssue && isOld) {
+            appliedColor = settings.colorActionNeeded;
+        }
+        if (!appliedColor && settings.enablePlatinumSupport && rules.supportTier && rules.supportTier.toUpperCase() === 'PLATINUM SUPPORT') {
+            row.classList.add('platinum-support-row');
+            appliedColor = settings.colorPlatinumSupport;
+        }
+        if (!appliedColor && settings.accountRules && rules.accountName) {
+            for (const name in settings.accountRules) {
+                if (rules.accountName.toLowerCase() === name.toLowerCase()) {
+                    appliedColor = settings.accountRules[name];
+                    break;
                 }
             }
         }
-        if (relevantChangeDetected) break;
+        if (!appliedColor && settings.enableEmptyFirstResponse && (rules.firstResponse === null || rules.firstResponse === '')) {
+            appliedColor = settings.colorEmptyFirstResponse;
+        }
+        if (!appliedColor && settings.enableJiraStatus && isJiraClosed) {
+            appliedColor = settings.colorJiraStatus;
+        }
+        if (!appliedColor && settings.enableOldLastModified && isOld) {
+            appliedColor = settings.colorOldLastModified;
+        }
+        if (appliedColor) {
+            row.style.backgroundColor = appliedColor;
+        }
+    } else {
+         row.style.backgroundColor = ''; // Explicitly clear color if note exists
     }
 
-    if (relevantChangeDetected) {
-        scheduleMainExecution();
-        retryAttempts = 0; 
-    } else {
-        if (retryAttempts < MAX_RETRY_ATTEMPTS) {
-            retryAttempts++;
-            scheduleMainExecution(); 
+
+    // --- 2. Inject Notes Button ---
+    if (headerIndices.subject !== undefined && rules.caseNumber) {
+        const subjectCell = cells[headerIndices.subject];
+        if (!subjectCell) return;
+
+        // Find the container inside the cell
+        const cellContainer = subjectCell.querySelector('span.slds-grid');
+        if (!cellContainer) return;
+
+        // Check if we've already added the button
+        let noteBtn = cellContainer.querySelector('.note-icon-btn');
+        
+        if (!noteBtn) {
+            // Create the new button
+            noteBtn = document.createElement('button');
+            noteBtn.className = 'note-icon-btn';
+            noteBtn.dataset.caseNumber = rules.caseNumber;
+            noteBtn.title = 'View/Add Note';
+            
+            // Add SVG icon inside the button
+            noteBtn.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd"></path></svg>`;
+            
+            noteBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Stop click from propagating to the row link
+                e.preventDefault();  // Stop click from navigating
+                showNotePopover(rules.caseNumber, e.currentTarget);
+            });
+            
+            // Add the button to the cell container
+            cellContainer.appendChild(noteBtn);
         }
+        
+        // Always update the active state
+        if (noteBtn) {
+            noteBtn.classList.toggle('note-icon-btn--active', hasNote);
+        }
+    }
+}
+
+// (The other helper functions: processSplitViewItem, processActiveRecordView, cleanupStyles remain the same)
+function processSplitViewItem(item) {
+    if (!item) return;
+    item.classList.remove('platinum-support-row');
+    const accountNameEl = Array.from(item.querySelectorAll('a[data-recordid] .uiOutputText')).find(el => {
+        const text = el.textContent.trim();
+        return isNaN(text) && !text.includes('/');
+    });
+    const rules = {
+        accountName: accountNameEl ? accountNameEl.textContent.trim() : null,
+        lastModifiedText: item.querySelector('span.uiOutputDateTime')?.textContent.trim() || null,
+    };
+    if (!settings) return;
+    
+    let appliedColor = null;
+    const lastModifiedDate = parseSalesforceDate(rules.lastModifiedText);
+    const isOld = lastModifiedDate && lastModifiedDate < new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    if (settings.enablePlatinumSupport && rules.supportTier && rules.supportTier.toUpperCase() === 'PLATINUM SUPPORT') {
+        item.classList.add('platinum-support-row');
+        appliedColor = settings.colorPlatinumSupport;
+    }
+    if (!appliedColor && settings.accountRules && rules.accountName) {
+        for (const name in settings.accountRules) {
+            if (rules.accountName.toLowerCase() === name.toLowerCase()) {
+                appliedColor = settings.accountRules[name];
+                break;
+            }
+        }
+    }
+    if (!appliedColor && settings.enableOldLastModified && isOld) {
+        appliedColor = settings.colorOldLastModified;
+    }
+    if (appliedColor) {
+        item.style.backgroundColor = appliedColor;
+    }
+}
+function processActiveRecordView() {
+    const entityLabel = document.querySelector('div.entityNameTitle records-entity-label');
+    if (entityLabel) {
+        if (!entityLabel.hasAttribute('data-original-text')) {
+            entityLabel.setAttribute('data-original-text', entityLabel.textContent);
+        } else {
+            entityLabel.textContent = entityLabel.getAttribute('data-original-text');
+        }
+    }
+    const urlMatch = window.location.pathname.match(/\/Case\/([a-zA-Z0-9]{18})/);
+    if (!urlMatch) return;
+    const activeRecordId = urlMatch[1];
+    const activeListItemLink = document.querySelector(`li.slds-split-view__list-item a[data-recordid="${activeRecordId}"]`);
+    if (!activeListItemLink) return;
+    const parentLi = activeListItemLink.closest('li.slds-split-view__list-item');
+    if (!parentLi) return;
+    let jiraStatusValue = null;
+    const labels = document.querySelectorAll('span.test-id__field-label');
+    const jiraLabel = Array.from(labels).find(el => el.textContent.trim() === 'JIRA Status');
+    if (jiraLabel) {
+        const valueWrapper = jiraLabel.closest('.slds-form-element')?.querySelector('.test-id__field-value');
+        if (valueWrapper) { jiraStatusValue = valueWrapper.textContent.trim(); }
+    }
+    if (settings.enableJiraStatus && jiraStatusValue && ['released', 'done', 'cancelled', 'canceled'].includes(jiraStatusValue.toLowerCase())) {
+        if (entityLabel) { entityLabel.textContent = `Jira is ${jiraStatusValue}`; }
+        if (!parentLi.style.backgroundColor) {
+             // Simplified call for split view
+            parentLi.style.backgroundColor = settings.colorJiraStatus;
+        }
+    }
+}
+function cleanupStyles() {
+    document.querySelectorAll('[style*="background-color"]').forEach(el => {
+        if (el.style.backgroundColor) { el.style.backgroundColor = ''; }
+    });
+    document.querySelectorAll('.platinum-support-row').forEach(el => {
+        el.classList.remove('platinum-support-row');
+    });
+    const entityLabel = document.querySelector('div.entityNameTitle records-entity-label');
+    if (entityLabel && entityLabel.hasAttribute('data-original-text')) {
+        entityLabel.textContent = entityLabel.getAttribute('data-original-text');
+    }
+}
+
+let running = false;
+let debounceTimer;
+
+function processViews() {
+    if (!chrome.runtime?.id) { return; } // Check if extension is still valid
+    
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        if (running) return;
+        running = true;
+
+        if (!settings || !settings.isGloballyEnabled) {
+            cleanupStyles();
+            running = false;
+            return;
+        }
+
+        try {
+            const mainTable = document.querySelector('table[role="grid"]');
+            if (mainTable) {
+                // Get indices first
+                headerIndices = getHeaderIndices(mainTable);
+                
+                // Only proceed if we have the critical columns for notes
+                if (headerIndices.caseNumber !== undefined && headerIndices.subject !== undefined) {
+                    const rows = mainTable.querySelectorAll('tbody tr');
+                    rows.forEach(applyStylingAndNotes);
+                }
+            }
+            
+            const splitViewListItems = document.querySelectorAll('li.slds-split-view__list-item');
+            if (splitViewListItems.length > 0) {
+                splitViewListItems.forEach(processSplitViewItem);
+                processActiveRecordView();
+            }
+        } catch (e) { console.error("Highlighter Error:", e); }
+        running = false;
+    }, 250); // Debounce to prevent rapid firing
+}
+
+function init() {
+    createNotePopover(); // Create the popover once on load
+
+    // Load all settings, including notes, into the global variables
+    chrome.storage.sync.get(null, (loadedSettings) => {
+        settings = loadedSettings;
+        allCaseNotes = loadedSettings.caseNotes || {};
+        
+        const initialCheck = setInterval(() => {
+            if (document.querySelector('table[role="grid"]') || document.querySelector('li.slds-split-view__list-item')) {
+                clearInterval(initialCheck);
+                processViews();
+            }
+        }, 500);
+        // Stop checking after 10 seconds to avoid infinite loops on pages without the target elements
+        setTimeout(() => clearInterval(initialCheck), 10000);
+    });
+
+    const observer = new MutationObserver(processViews);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: false });
+}
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync') {
+        // Reload all settings when they change
+        chrome.storage.sync.get(null, (loadedSettings) => {
+            settings = loadedSettings;
+            allCaseNotes = loadedSettings.caseNotes || {};
+            processViews();
+        });
     }
 });
 
-function startObserver() {
-    console.log("Salesforce Colorizer: Attaching observer to document.body...");
-    observer.observe(document.body, {
-        childList: true, 
-        subtree: true,   
-        attributes: true, 
-        attributeFilter: ['aria-label', 'title', 'class', 'style'] 
-    });
+// Listen for the 'Apply' button message from the popup
+window.addEventListener('message', (event) => {
+    if (event.source === window && event.data.type === 'APPLY_RULES_NOW') {
+        processViews();
+    }
+});
 
-    setTimeout(() => {
-        console.log("Initial coloring attempt after page load.");
-        window.applySalesforceColoring();
-    }, 2000); 
-}
-
-window.addEventListener('load', startObserver);
+init();
